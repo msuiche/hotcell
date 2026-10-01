@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from expmon.events import RuleEngine, Signal  # noqa: E402
+from hotcell.events import RuleEngine, Signal  # noqa: E402
 
 RULES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "rules", "default.yaml")
@@ -82,7 +82,7 @@ class TestGlyphGriftReplay(unittest.TestCase):
 
 class TestMarkdownReport(unittest.TestCase):
     def test_render_includes_verdict_and_capability(self):
-        from expmon.report import render_markdown
+        from hotcell.report import render_markdown
         e = engine()
         e.record_capability({"hooks": ["CGPathGetBoundingBox"], "missing": ["aa_cache_render (not exported)"]})
         e.process(Signal("glyph-path-anomaly", "high", {"width_px": 1490},

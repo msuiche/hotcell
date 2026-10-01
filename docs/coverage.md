@@ -4,7 +4,7 @@ EXPMON (Windows, Haifei Li) was a Frida-based in-process monitor detecting
 file-based zero-day exploit *behavior* in browsers and document readers.
 This is the Apple-platform implementation of that concept.
 
-## Hooks (agent/expmon_agent.js)
+## Hooks (agent/hotcell_agent.js)
 
 | area | hook | platforms | verified on-device |
 | --- | --- | --- | --- |
@@ -31,10 +31,10 @@ to a crash.
 
 ## To qualify on device (macOS first)
 
-1. `pip install -e ".[live]"` on the Mac; `expmon list`
-2. `expmon scan --file docs/poc.pdf` (any PDF) → confirm `quicklook-render`
+1. `pip install -e ".[live]"` on the Mac; `hotcell list`
+2. `hotcell scan --file docs/poc.pdf` (any PDF) → confirm `quicklook-render`
    fires on the qlmanage run and the capability event lists the expected hooks
-3. `expmon watch --target Preview` while opening a big PDF → `pdf-opened`
+3. `hotcell watch --target Preview` while opening a big PDF → `pdf-opened`
 4. Sanity: verify no false `glyph-path-anomaly` on normal document browsing;
    calibrate `GLYPH_BBOX_MAX_PX` if normal oversized glyph art trips it
 5. iOS: jailbroken device with frida-server → `--device usb`; non-jailbroken →

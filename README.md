@@ -1,4 +1,4 @@
-# expmon-apple — runtime exploit monitor for Apple document/image pipelines
+# hotcell — runtime exploit monitor for Apple document/image pipelines
 
 An iOS/macOS implementation of the EXPMON concept (runtime, agent-based exploit
 detection for file-format attack surfaces, no sandbox). Prompted by
@@ -32,8 +32,8 @@ fixed-point bbox corruption, reachable from a PDF-embedded font).
 ## Layout
 
 ```
-agent/expmon_agent.js   Frida agent (macOS + iOS; same script, both platforms)
-expmon/                 host CLI (attach/spawn, event pipeline, scoring, report)
+agent/hotcell_agent.js   Frida agent (macOS + iOS; same script, both platforms)
+hotcell/                 host CLI (attach/spawn, event pipeline, scoring, report)
 rules/default.yaml      signal → severity/verdict rule pack (editable)
 docs/glyph-grift.md     how CVE-2026-86950 maps onto hooks/rules
 docs/coverage.md        hook matrix vs. the EXPMON (Windows) concept
@@ -44,16 +44,16 @@ tests/                  pipeline tests (run anywhere; frida optional via mocks)
 
 ```bash
 # headless scan of one file through Apple's own thumbnail pipeline
-expmon scan --file sketchy.pdf --out report/
+hotcell scan --file sketchy.pdf --out report/
 
 # attach to a live app and watch
-expmon watch --target WhatsApp --minutes 30
+hotcell watch --target WhatsApp --minutes 30
 
 # enumerate candidate renderer processes
-expmon list
+hotcell list
 
 # iOS: same agent over USB (jailbroken + frida-server, or gadget-repackaged app)
-expmon watch --device usb --target WhatsApp
+hotcell watch --device usb --target WhatsApp
 ```
 
 `scan` spawns `qlmanage -t` under the agent: the file travels the exact

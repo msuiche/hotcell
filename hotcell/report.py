@@ -26,7 +26,7 @@ def render_markdown(session: Dict[str, Any]) -> str:
     v = session.get("verdict", {})
     caps = session.get("capability", {})
     lines = [
-        f"# expmon-apple — session {meta.get('session', 'n/a')}",
+        f"# hotcell — session {meta.get('session', 'n/a')}",
         "",
         f"**verdict: {VERDICT_ICON.get(v.get('verdict', 'log'), '.')} {v.get('verdict', 'log').upper()}** "
         f"(score {v.get('score', 0)})",

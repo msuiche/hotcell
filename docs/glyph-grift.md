@@ -1,4 +1,4 @@
-# glyph-grift.md — how CVE-2026-86950 maps onto expmon-apple
+# glyph-grift.md — how CVE-2026-86950 maps onto hotcell
 
 Source chain (public, calif.io "The Great Glyph Grift", Sept 2026; quoted by
 @odinshell, wished-for-tool tweet by @haifeili):

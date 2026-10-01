@@ -8,7 +8,7 @@ from typing import Callable, Dict, List, Optional
 
 AGENT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "agent", "expmon_agent.js")
+    "agent", "hotcell_agent.js")
 
 DEVICES = {"local", "usb"}
 
@@ -41,7 +41,7 @@ class Monitor:
             except ImportError as e:
                 raise RuntimeError(
                     "frida is required to drive live targets — "
-                    "pip install expmon-apple[live] (on a macOS/iOS host)") from e
+                    "pip install hotcell[live] (on a macOS/iOS host)") from e
             self._frida = frida
             self._device = (frida.get_usb_device(timeout=10)
                             if self.device_kind == "usb"

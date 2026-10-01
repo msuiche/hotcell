@@ -1,9 +1,9 @@
-"""expmon CLI.
+"""hotcell CLI.
 
-    expmon list                     enumerate target renderer processes
-    expmon watch --target NAME      attach + watch live processes
-    expmon scan  --file F           headless QuickLook thumbnail scan of a file
-    expmon report --session F       rebuild a verdict from a saved session.json
+    hotcell list                     enumerate target renderer processes
+    hotcell watch --target NAME      attach + watch live processes
+    hotcell scan  --file F           headless QuickLook thumbnail scan of a file
+    hotcell report --session F       rebuild a verdict from a saved session.json
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def _run_and_report(monitor, engine, sessions, args, stem_meta) -> dict:
         print(f"    chain: {c.chain} (+{c.weight}) — {c.description}")
     print(f"[*] report: {paths['markdown']}")
     if getattr(args, "notify", False):
-        report_mod.notify_macos(f"expmon: {v.label}", f"score {v.score} — {stem_meta['target']}")
+        report_mod.notify_macos(f"hotcell: {v.label}", f"score {v.score} — {stem_meta['target']}")
     return paths
 
 
@@ -142,9 +142,9 @@ def cmd_report(args) -> int:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="expmon",
+    ap = argparse.ArgumentParser(prog="hotcell",
                                  description="runtime exploit monitor for Apple document pipelines")
-    ap.add_argument("--version", action="version", version=f"expmon {__version__}")
+    ap.add_argument("--version", action="version", version=f"hotcell {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p):

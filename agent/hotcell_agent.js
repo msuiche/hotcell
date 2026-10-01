@@ -1,5 +1,5 @@
 /*
- * expmon-apple — runtime exploit monitor for Apple document/image pipelines.
+ * hotcell — runtime exploit monitor for Apple document/image pipelines.
  * Frida agent: identical script on macOS and iOS; injected into the real
  * renderer/processor processes (QuickLook ext, qlmanage, sips, WhatsApp, Mail,
  * Preview, ...). Emits tagged signals; the host correlates them into verdicts.
