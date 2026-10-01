@@ -1,0 +1,13 @@
+[project]
+name = "expmon-apple"
+version = "0.1.0"
+description = "Runtime exploit monitor for Apple document/image pipelines (iOS/macOS EXPMON)"
+requires-python = ">=3.9"
+dependencies = ["pyyaml>=6.0"]
+[project.optional-dependencies]
+live = ["frida>=16"]  # needed only on a mac/iOS host driving real targets
+[project.scripts]
+expmon = "expmon.cli:main"
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"

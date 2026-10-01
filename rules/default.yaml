@@ -1,0 +1,51 @@
+rules:
+  # --- document / delivery context (informational) ---
+  pdf-opened:        {weight: 1, description: "PDFDocument initWithData: (large)"}
+  pdf-opened-url:    {weight: 1, description: "PDFDocument initWithURL:"}
+  paperkit-data:     {weight: 1, description: "PaperKit ingesting document data"}
+  quicklook-render:  {weight: 2, description: "QuickLook thumbnail render (delivery channel tag)"}
+  aa-cache-render-hit: {weight: 5, description: "aa_cache_render reachable and hooked"}
+
+  # --- medium behavioral signals ---
+  image-bomb:        {weight: 10, description: "decoded image >100 MP (decoder stress)"}
+  pdf-embedded-font: {weight: 15, description: "font program parsed while PDF data was recently in flight (cross-format boundary)"}
+
+  # --- high behavioral signals ---
+  glyph-path-anomaly:
+    weight: 45
+    description: "Corrupt/oversized glyph path bounding box — Great Glyph Grift fingerprint"
+    escalate:
+      add_if_context:
+        quicklook_recent: 15   # +15 when the anomaly is delivery-channel adjacent
+  big-anon-map:
+    weight: 10
+    description: "anonymous map >=128MB (heap-spray prep)"
+    escalate:
+      detail_gte: {field: bytes, gte: 536870912, weight: 45}
+  rwx-transition:    {weight: 45, description: "mprotect to RWX (shellcode landing)"}
+
+chains:
+  glyph-grift-chain:
+    severity: critical
+    weight: 60
+    window_s: 120
+    required_rules: [glyph-path-anomaly]
+    required_tags_any: [quicklook_recent, pdf_open_recent, pdf_render_recent]
+    description: "glyph bbox corruption inside the document delivery/render window (CVE-2026-86950 shape)"
+  font-crossing:
+    severity: critical
+    weight: 60
+    window_s: 120
+    required_rules: [pdf-embedded-font, glyph-path-anomaly]
+    required_tags_any: [pdf_open_recent]
+    description: "PDF-embedded font crossed into the glyph rasterizer with an anomalous path"
+
+weights:
+  critical: 100
+  high: 45
+  medium: 12
+  low: 1
+
+verdict_thresholds:
+  exploit-likely: 100
+  investigate: 35
