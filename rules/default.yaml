@@ -10,6 +10,11 @@ rules:
   image-bomb:        {weight: 10, description: "decoded image >100 MP (decoder stress)"}
   pdf-embedded-font: {weight: 15, description: "font program parsed while PDF data was recently in flight (cross-format boundary)"}
 
+  # --- static stage (elegant-bouncer integration) ---
+  bouncer-static-hit:
+    weight: 45
+    description: "elegant-bouncer structural hit — known exploit shape in the file (static stage)"
+
   # --- high behavioral signals ---
   glyph-path-anomaly:
     weight: 45
@@ -25,6 +30,18 @@ rules:
   rwx-transition:    {weight: 45, description: "mprotect to RWX (shellcode landing)"}
 
 chains:
+  static-runtime-agreement:
+    severity: critical
+    weight: 60
+    window_s: 300
+    required_rules: [bouncer-static-hit, glyph-path-anomaly]
+    description: "static structural hit + runtime glyph anomaly (known + behavioral agreement)"
+  static-image-agreement:
+    severity: critical
+    weight: 60
+    window_s: 300
+    required_rules: [bouncer-static-hit, image-bomb]
+    description: "static structural hit + decoder stress at runtime (BLASTPASS-class agreement)"
   glyph-grift-chain:
     severity: critical
     weight: 60

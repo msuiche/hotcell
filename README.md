@@ -32,13 +32,36 @@ fixed-point bbox corruption, reachable from a PDF-embedded font).
 ## Layout
 
 ```
-agent/hotcell_agent.js   Frida agent (macOS + iOS; same script, both platforms)
-hotcell/                 host CLI (attach/spawn, event pipeline, scoring, report)
+agent/hotcell_agent.js  Frida agent (macOS + iOS; same script, both platforms)
+hotcell/                host CLI (attach/spawn, event pipeline, scoring, report)
+  static.py             optional static stage: elegant-bouncer subprocess adapter
 rules/default.yaml      signal → severity/verdict rule pack (editable)
 docs/glyph-grift.md     how CVE-2026-86950 maps onto hooks/rules
 docs/coverage.md        hook matrix vs. the EXPMON (Windows) concept
 tests/                  pipeline tests (run anywhere; frida optional via mocks)
 ```
+
+## Two-stage scanning with ELEGANTBOUNCER
+
+hotcell (runtime behavior) and [elegant-bouncer](https://github.com/msuiche/elegant-bouncer)
+(static structure) are complementary layers over the same threat class:
+
+- **elegant-bouncer** — what the *file* is: structural detection of known
+  mobile exploit shapes (FORCEDENTRY, BLASTPASS, TRIANGULATION, DNG/libheif
+  CVEs). No execution required; also scans iOS backups / messaging DBs.
+- **hotcell** — what the *process does* with the file: in-process behavioral
+  signals, zero-day subclasses, delivered exactly on Apple's own pipeline.
+
+`hotcell scan --file F` fuses both. If `elegantbouncer` is on `PATH` (or
+`HOTCELL_BOUNCER` points at it), stage 1 runs the static scan and its
+findings fold into the same rule engine (`bouncer-static-hit`); agreement
+chains fire when static + runtime signals corroborate. No binary → static
+stage is skipped and reported honestly in the session. `--static-only`
+scans without frida; `--no-static` forces runtime-only.
+
+Static hits alone score `investigate`; static hit + runtime anomaly scores
+`exploit-likely`. An upstream `--json` output flag for elegant-bouncer would
+make the adapter contract even tighter (currently parses `THREAT found:` lines).
 
 ## Usage (macOS)
 

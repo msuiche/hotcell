@@ -49,6 +49,20 @@ def render_markdown(session: Dict[str, Any]) -> str:
         for c in v["chains"]:
             lines.append(f"- `{c['chain']}` (+{c['weight']}): {c['description']} "
                          f"(rules: {', '.join(c['rules_seen'])}, window {c['window_s']}s)")
+    st = (session.get("meta") or {}).get("static")
+    if st is not None:
+        lines += ["", "## static stage (elegant-bouncer)"]
+        if st.get("skipped"):
+            lines.append("skipped (--no-static)")
+        elif not st.get("available"):
+            lines.append(f"unavailable — {st.get('error', 'elegantbouncer not found')}")
+        elif st.get("threats"):
+            for t in st["threats"]:
+                lines.append(f"- THREAT: **{t['name']}** ({', '.join(t['cves']) or 'n/a'})")
+        else:
+            lines.append("clean — no known exploit shapes")
+        if st.get("stdout_tail"):
+            lines += ["", "```", st["stdout_tail"][-1200:].rstrip(), "```"]
     lines += ["", "## capability (hooks resolved at attach)"]
     if caps:
         for h in caps.get("hooks", []):

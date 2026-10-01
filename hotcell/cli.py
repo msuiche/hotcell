@@ -1,9 +1,10 @@
 """hotcell CLI.
 
-    hotcell list                     enumerate target renderer processes
-    hotcell watch --target NAME      attach + watch live processes
-    hotcell scan  --file F           headless QuickLook thumbnail scan of a file
-    hotcell report --session F       rebuild a verdict from a saved session.json
+    hotcell list                    enumerate target renderer processes
+    hotcell watch --target NAME     attach + watch live processes
+    hotcell scan  --file F          two-stage file scan: static (elegant-bouncer,
+                                    if available) + runtime (QuickLook under agent)
+    hotcell report --session F      rebuild a verdict from a saved session.json
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import sys
 import time
 
 from . import __version__
+from . import static as static_mod
 from .events import RuleEngine, Signal
 from .session import Monitor
 from . import report as report_mod
@@ -26,7 +28,26 @@ def _engine(args) -> RuleEngine:
     return RuleEngine.load_yaml(args.rules)
 
 
-def _run_and_report(monitor, engine, sessions, args, stem_meta) -> dict:
+def _finish(engine: RuleEngine, stem_meta: dict, args) -> int:
+    """Write the session report, print verdict + chains, optionally notify."""
+    session = engine.session_dict({
+        **stem_meta,
+        "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "ended": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "signals": len(engine.signals),
+    })
+    v = engine.verdict()
+    paths = report_mod.write_report(session, args.out, stem=stem_meta["session"])
+    print(f"[*] verdict: {v.label.upper()} (score {v.score})")
+    for c in v.chains:
+        print(f"    chain: {c.chain} (+{c.weight}) — {c.description}")
+    print(f"[*] report: {paths['markdown']}")
+    if getattr(args, "notify", False):
+        report_mod.notify_macos(f"hotcell: {v.label}", f"score {v.score} — {stem_meta['target']}")
+    return 0
+
+
+def _run_and_report(monitor, engine, sessions, args, stem_meta) -> int:
     events_out = {"capability": {}, "signals": []}
 
     def on_event(payload):
@@ -53,22 +74,26 @@ def _run_and_report(monitor, engine, sessions, args, stem_meta) -> dict:
         print("[*] interrupted")
     for s in sessions:
         s.close()
+    return _finish(engine, stem_meta, args)
 
-    session = engine.session_dict({
-        **stem_meta,
-        "started": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "ended": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "signals": len(events_out["signals"]),
-    })
-    v = engine.verdict()
-    paths = report_mod.write_report(session, args.out, stem=stem_meta["session"])
-    print(f"[*] verdict: {v.label.upper()} (score {v.score})")
-    for c in v.chains_matched:
-        print(f"    chain: {c.chain} (+{c.weight}) — {c.description}")
-    print(f"[*] report: {paths['markdown']}")
-    if getattr(args, "notify", False):
-        report_mod.notify_macos(f"hotcell: {v.label}", f"score {v.score} — {stem_meta['target']}")
-    return paths
+
+def _run_static_stage(engine: RuleEngine, file_path: str, args) -> dict:
+    """Stage 1 of scan: static structural detection via elegant-bouncer."""
+    if getattr(args, "no_static", False):
+        return {"available": False, "threats": [], "skipped": True}
+    static = static_mod.scan_file(file_path)
+    for t in static.get("threats", []):
+        engine.process(Signal("bouncer-static-hit", "high",
+                              {"threat": t["name"], "cves": t["cves"], "stage": "static"},
+                              {}, ts=time.time()))
+        print(f"  [static] THREAT found: {t['name']} ({', '.join(t['cves']) or 'n/a'})")
+    if not static["available"]:
+        print(f"[*] static stage: unavailable — {static.get('error', '')} (runtime-only session)")
+    elif static["threats"]:
+        print("[*] static stage: threats found — dynamic stage will confirm behavior")
+    else:
+        print("[*] static stage: clean (no known exploit shapes)")
+    return static
 
 
 def cmd_list(args) -> int:
@@ -100,16 +125,25 @@ def cmd_watch(args) -> int:
         return 2
     return _run_and_report(monitor, engine, sessions, args,
                            {"session": f"watch-{report_mod.now()}",
-                            "target": ",".join(args.target), "pid": "-", "device": args.device}) and 0
+                            "target": ",".join(args.target), "pid": "-", "device": args.device})
 
 
 def cmd_scan(args) -> int:
-    """Headless: run the file through Apple's own QuickLook thumbnail pipeline
-    (qlmanage -t) under the agent — the delivery path of the published chain."""
+    """Two-stage file scan:
+    stage 1 static (elegant-bouncer, optional binary), stage 2 runtime
+    (file travels Apple's own QuickLook thumbnail pipeline under the agent)."""
     if not os.path.isfile(args.file):
         print(f"error: no such file: {args.file}", file=sys.stderr)
         return 2
     engine = _engine(args)
+    stem_meta = {"session": f"scan-{report_mod.now()}",
+                 "target": f"scan:{os.path.basename(args.file)}",
+                 "pid": "-", "device": args.device}
+
+    stem_meta["static"] = _run_static_stage(engine, args.file, args)
+    if getattr(args, "static_only", False):
+        return _finish(engine, stem_meta, args)
+
     monitor = Monitor(args.device)
     tmp = os.path.abspath(args.out)
     os.makedirs(tmp, exist_ok=True)
@@ -118,10 +152,7 @@ def cmd_scan(args) -> int:
     except (RuntimeError, Exception) as e:
         print(f"error spawning qlmanage: {e}", file=sys.stderr)
         return 2
-    return _run_and_report(monitor, engine, [s], args,
-                           {"session": f"scan-{report_mod.now()}",
-                            "target": f"scan:{os.path.basename(args.file)}",
-                            "pid": s.pid, "device": args.device}) and 0
+    return _run_and_report(monitor, engine, [s], args, stem_meta)
 
 
 def cmd_report(args) -> int:
@@ -163,8 +194,12 @@ def main(argv=None) -> int:
                          help="process name (repeatable)")
     common(p_watch)
 
-    p_scan = sub.add_parser("scan", help="headless QuickLook scan of a file")
-    p_scan.add_argument("--file", required=True, help="file to thumbnail via qlmanage")
+    p_scan = sub.add_parser("scan", help="two-stage file scan (static + runtime)")
+    p_scan.add_argument("--file", required=True, help="file to scan")
+    p_scan.add_argument("--static-only", action="store_true",
+                        help="run only the elegant-bouncer static stage (no frida needed)")
+    p_scan.add_argument("--no-static", action="store_true",
+                        help="skip the static stage even if elegantbouncer is installed")
     common(p_scan)
 
     p_rep = sub.add_parser("report", help="rebuild verdict from saved session.json")

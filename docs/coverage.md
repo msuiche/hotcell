@@ -26,6 +26,9 @@ to a crash.
 - agent JS syntax (node --check) — yes
 - pipeline: rule matching, escalation, chains, dedupe, verdicts — yes (unit
   tests, including the glyph-grift replay)
+- static stage: elegant-bouncer subprocess adapter (scan parse, graceful
+  degradation, agreement chains, `--static-only`/`--no-static`) — yes,
+  stub-binary tests; real-binary qualification pending on a device
 - report render (markdown/JSON), CLI arg surface — yes (tests + `--help`)
 - frida imports: lazy — pipeline runs without frida installed
 
