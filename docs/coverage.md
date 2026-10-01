@@ -1,52 +1,66 @@
-# coverage.md — hook matrix and verification status
+# Coverage and qualification
 
-EXPMON (Windows, Haifei Li) was a Frida-based in-process monitor detecting
-file-based zero-day exploit *behavior* in browsers and document readers.
-This is the Apple-platform implementation of that concept.
+The v0.3 application and tests are Rust. Qualification is on macOS arm64 with
+Rust 1.99.0 and the pinned Frida 17.19.0 devkit. The declared Rust 1.88 minimum
+reflects dependency requirements; that compiler version has not been separately
+qualified.
 
-## Hooks (agent/hotcell_agent.js)
+Verified on 2026-10-01: 38 non-live Rust tests, seven native tests (also passing
+in the optimized release profile), and 36 tests with `--no-default-features`.
+Formatting and Clippy checks pass for the application; both feature configurations
+pass Clippy with warnings denied.
 
-| area | hook | platforms | verified on-device |
-| --- | --- | --- | --- |
-| PDFKit | `PDFDocument -initWithData:`, `-initWithURL:` | macOS, iOS | pending (needs a Mac/iOS host) |
-| PaperKit | all `*data*`/`*Data*` selectors of `PaperDocument` | macOS | pending |
-| QuickLook | `QLThumbnailGenerator generateBestRepresentation*` | macOS, iOS | pending |
-| ImageIO | `CGImageSourceCreateImageAtIndex` (+100MP image-bomb), `CGImageSourceCreateThumbnailAtIndex` (tag) | macOS, iOS | pending |
-| CoreGraphics | `CGPathGetBoundingBox` (glyph-anomaly), `CGContextDrawPDFPage` (tag), `CGFontCreateWithDataProvider` (crossing) | macOS, iOS | pending |
-| CoreText | `CTFontCreatePathForGlyph` (per-thread glyph context), `CTFontCreateWithGraphicsFont` | macOS, iOS | pending |
-| sink | `aa_cache_render` — resolved only if exported; else honestly missing | macOS | resolved=null on checked builds |
-| primitives | `mmap` ≥128MB anon, `mprotect` → RWX | macOS, iOS | pending |
+| Area | Evidence | Limits |
+| --- | --- | --- |
+| Build | Cargo application with embedded agent/rules; default and Frida-free feature configurations | Native dependencies require platform build tools and an initial devkit download |
+| Lifecycle | Real agent boot, capability barrier before resume, CLI watch attachment, process exit, owned-process cleanup | Protected app attachment depends on OS policy |
+| PDF scan | Direct CoreGraphics open/page render, PNG preview, acknowledged completion | Does not reproduce QuickLook/XPC or PaperKit routing |
+| Image scan | Direct ImageIO PNG decode, preview and completion | Other formats/OS versions need qualification |
+| Objective-C | Real PDFDocument `initWithURL:` hook through native libobjc | PaperKit/QuickLook selectors remain best-effort |
+| Glyph bounds | CoreText paths compared to native CGRect values | Exported final paths only, not internal rasterizer bounds |
+| False-positive checks | Ordinary glyph and unrelated large rectangle produce no glyph anomaly | Larger benign document/font corpus still needed |
+| Memory | Successful 2 GiB anonymous virtual mapping detected without signed 32-bit truncation | RWX transitions may be denied by host policy |
+| Static adapter | Summary/legacy parsing, deduplication, subprocess execution, missing binary, timeout and exit failures | Rust suite uses stub scanners; real ELEGANTBOUNCER qualification was performed on the Python baseline |
+| Correlation | Seconds/milliseconds, expiration, deduplication, process isolation; real glyph signal yields chain | Heuristic weights and thresholds need corpus calibration |
+| Replay | Python v0.2 golden report preserves verdict/context; Rust live positive and clean reports replay | Legacy reports without raw events are rejected |
+| Failures | Malformed PDF, startup error, missing hooks, static errors, feature-disabled runtime | Incomplete reports must not be treated as a clean bill of health |
 
-Symbol resolution is guarded (`Module.findExportByName`, try/catch per hook):
-a build that moved a symbol degrades that hook to `capability.missing`, never
-to a crash.
+## Repeatable checks
 
-## Verified *here* (build host, Linux)
+```bash
+cargo test --locked
+cargo test --locked --no-default-features
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked -- --ignored --test-threads=1
+cargo build --release --locked
+```
 
-- agent JS syntax (node --check) — yes
-- pipeline: rule matching, escalation, chains, dedupe, verdicts — yes (unit
-  tests, including the glyph-grift replay)
-- static stage: elegant-bouncer subprocess adapter (scan parse, graceful
-  degradation, agreement chains, `--static-only`/`--no-static`) — yes,
-  stub-binary tests; real-binary qualification pending on a device
-- report render (markdown/JSON), CLI arg surface — yes (tests + `--help`)
-- frida imports: lazy — pipeline runs without frida installed
+The ignored tests require macOS, Frida's native devkit, Clang and permission to
+instrument their own test processes. The Objective-C probe is a test fixture;
+production rendering is implemented in Rust. No known exploit fixture is executed
+by these tests. The large-font probe verifies signal transport and correlation,
+not detection of a particular CVE.
 
-## To qualify on device (macOS first)
+The baseline Python implementation passed 33 offline tests and five native tests
+before removal. `tests/fixtures/python-v0.2.session.json` was generated by that
+implementation and is retained for report compatibility checks.
 
-1. `pip install -e ".[live]"` on the Mac; `hotcell list`
-2. `hotcell scan --file docs/poc.pdf` (any PDF) → confirm `quicklook-render`
-   fires on the qlmanage run and the capability event lists the expected hooks
-3. `hotcell watch --target Preview` while opening a big PDF → `pdf-opened`
-4. Sanity: verify no false `glyph-path-anomaly` on normal document browsing;
-   calibrate `GLYPH_BBOX_MAX_PX` if normal oversized glyph art trips it
-5. iOS: jailbroken device with frida-server → `--device usb`; non-jailbroken →
-   repackage target app with FridaGadget loading this agent script
+## Native integration details
 
-## Roadmap
+Frida owns its worker event loop. The host dispatches the GLib default context;
+installing a separate thread-default context can deadlock macOS backend discovery.
+Session callbacks retain their state until disconnected. Failed agent startup
+cleans up the suspended renderer; closing a watch session leaves its target alive.
 
-- pattern-scan resolution for local symbols (aa_cache_render) with integrity
-  bounds (module range + prologue fingerprint), reported as untrusted if loose
-- per-rule YAML versioning + rule-pack signing
-- Safari web content (JSC) rules — EXPMON's browser coverage, Apple edition
-- sysextenable host (notification-only, no TCC prompts on monitor reads)
+The published `frida-sys` 0.17.2 crate bundles Frida 17.9.5. That version failed the
+malformed-document regression on the qualification host. The local bindings pin
+17.19.0, matching the successful Python baseline and Rust native tests.
+
+## Remaining qualification
+
+- iOS, Intel macOS, other OS versions, and late framework loading in third-party apps.
+- Representative benign and malicious document corpora, precision/recall and overhead.
+- Internal glyph rasterizer sink resolution; exported proxies cannot establish full coverage.
+- Automatic child/XPC process instrumentation is not implemented.
+- Live monitoring on non-macOS hosts is not qualified; use the Frida-free build for static/replay work.

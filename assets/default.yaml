@@ -1,10 +1,14 @@
 rules:
   # --- document / delivery context (informational) ---
-  pdf-opened:        {weight: 1, description: "PDFDocument initWithData: (large)"}
+  pdf-opened:        {weight: 1, description: "PDF document opened in the instrumented process"}
   pdf-opened-url:    {weight: 1, description: "PDFDocument initWithURL:"}
   paperkit-data:     {weight: 1, description: "PaperKit ingesting document data"}
   quicklook-render:  {weight: 2, description: "QuickLook thumbnail render (delivery channel tag)"}
   aa-cache-render-hit: {weight: 5, description: "aa_cache_render reachable and hooked"}
+
+  pdf-rendered:     {weight: 0, description: "PDF page rendered in the instrumented process"}
+  render-complete:  {weight: 0, description: "Renderer completion handshake"}
+  image-decoded:    {weight: 0, description: "Image decoded in the instrumented process"}
 
   # --- medium behavioral signals ---
   image-bomb:        {weight: 10, description: "decoded image >100 MP (decoder stress)"}
@@ -18,7 +22,7 @@ rules:
   # --- high behavioral signals ---
   glyph-path-anomaly:
     weight: 45
-    description: "Corrupt/oversized glyph path bounding box — Great Glyph Grift fingerprint"
+    description: "Non-finite, negative, or oversized exported glyph path (heuristic)"
     escalate:
       add_if_context:
         quicklook_recent: 15   # +15 when the anomaly is delivery-channel adjacent
@@ -48,7 +52,7 @@ chains:
     window_s: 120
     required_rules: [glyph-path-anomaly]
     required_tags_any: [quicklook_recent, pdf_open_recent, pdf_render_recent]
-    description: "glyph bbox corruption inside the document delivery/render window (CVE-2026-86950 shape)"
+    description: "glyph-path anomaly inside recent document context (heuristic)"
   font-crossing:
     severity: critical
     weight: 60

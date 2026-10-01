@@ -1,0 +1,82 @@
+/*
+ * Copyright © 2020-2021 Keegan Saunders
+ *
+ * Licence: wxWindows Library Licence, Version 3.1
+ */
+
+extern crate bindgen;
+
+use std::env;
+use std::path::PathBuf;
+
+fn main() {
+    println!(
+        "cargo:rustc-link-search={}",
+        env::var("CARGO_MANIFEST_DIR").unwrap()
+    );
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
+
+    #[cfg(feature = "auto-download")]
+    let include_dir = {
+        use frida_build::download_and_use_devkit;
+        download_and_use_devkit("core", include_str!("FRIDA_VERSION").trim())
+    };
+
+    #[cfg(not(feature = "auto-download"))]
+    println!("cargo:rustc-link-lib=frida-core");
+
+    if target_os == "linux" {
+        println!("cargo:rustc-link-lib=pthread");
+        println!("cargo:rustc-link-lib=resolv");
+    }
+
+    if target_vendor == "apple" {
+        println!("cargo:rustc-link-lib=bsm");
+        println!("cargo:rustc-link-lib=resolv");
+        println!("cargo:rustc-link-lib=pthread");
+        if target_os == "macos" {
+            println!("cargo:rustc-link-lib=framework=AppKit");
+            println!("cargo:rustc-link-lib=framework=Security");
+            println!("cargo:rustc-link-lib=framework=IOKit");
+        }
+    }
+
+    let bindings = bindgen::Builder::default();
+
+    #[cfg(feature = "auto-download")]
+    let bindings = bindings.clang_arg(format!("-I{include_dir}"));
+
+    #[cfg(not(feature = "auto-download"))]
+    let bindings = if std::env::var("DOCS_RS").is_ok() {
+        panic!("documentation builds require the auto-download feature")
+    } else {
+        bindings
+    };
+
+    let bindings = bindings
+        .allowlist_function("(frida|g|_frida_g)_.*")
+        .allowlist_type("(Frida|G).*")
+        .allowlist_var("(FRIDA|G)_.*")
+        .formatter(bindgen::Formatter::Prettyplease)
+        .header_contents("core.h", "#include \"frida-core.h\"")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate_comments(false)
+        .layout_tests(false)
+        .generate()
+        .unwrap();
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .unwrap();
+
+    if target_os == "windows" {
+        for lib in [
+            "dnsapi", "iphlpapi", "psapi", "winmm", "ws2_32", "advapi32", "crypt32", "gdi32",
+            "kernel32", "ole32", "secur32", "shell32", "shlwapi", "user32", "setupapi",
+        ] {
+            println!("cargo:rustc-link-lib=dylib={lib}");
+        }
+    }
+}

@@ -3,4 +3,9 @@ __pycache__/
 *.pyc
 report/
 *.session.json
+!/tests/fixtures/*.session.json
 .DS_Store
+build/
+dist/
+*.egg-info/
+/target/

@@ -1,0 +1,255 @@
+{
+  "schema_version": 2,
+  "meta": {
+    "session": "python-v0.2-parity",
+    "status": "complete",
+    "target": "synthetic signals"
+  },
+  "signals": [
+    {
+      "rule": "bouncer-static-hit",
+      "severity": "high",
+      "detail": {
+        "threat": "BLASTPASS",
+        "cves": [
+          "CVE-2023-4863"
+        ]
+      },
+      "context": {},
+      "ts": 1700000000,
+      "stack": [],
+      "proc": null,
+      "pid": null,
+      "ts_unit": "s"
+    },
+    {
+      "rule": "pdf-opened",
+      "severity": "low",
+      "detail": {},
+      "context": {
+        "pdf_open_recent": true
+      },
+      "ts": 1700000001,
+      "stack": [],
+      "proc": null,
+      "pid": 10,
+      "ts_unit": "s"
+    },
+    {
+      "rule": "pdf-embedded-font",
+      "severity": "low",
+      "detail": {},
+      "context": {
+        "pdf_open_recent": true
+      },
+      "ts": 1700000002,
+      "stack": [],
+      "proc": null,
+      "pid": 10,
+      "ts_unit": "s"
+    },
+    {
+      "rule": "glyph-path-anomaly",
+      "severity": "high",
+      "detail": {
+        "bbox": {
+          "w": 2000
+        }
+      },
+      "context": {
+        "pdf_open_recent": true,
+        "quicklook_recent": true
+      },
+      "ts": 1700000003.0,
+      "stack": [],
+      "proc": null,
+      "pid": 10,
+      "ts_unit": "s"
+    },
+    {
+      "rule": "glyph-path-anomaly",
+      "severity": "high",
+      "detail": {
+        "bbox": {
+          "w": 2000
+        }
+      },
+      "context": {
+        "pdf_open_recent": true,
+        "quicklook_recent": true
+      },
+      "ts": 1700000003.5,
+      "stack": [],
+      "proc": null,
+      "pid": 10,
+      "ts_unit": "s"
+    },
+    {
+      "rule": "image-bomb",
+      "severity": "low",
+      "detail": {},
+      "context": {},
+      "ts": 1700000004,
+      "stack": [],
+      "proc": null,
+      "pid": 11,
+      "ts_unit": "s"
+    },
+    {
+      "rule": "big-anon-map",
+      "severity": "low",
+      "detail": {
+        "bytes": 2147483648
+      },
+      "context": {},
+      "ts": 1700000005,
+      "stack": [],
+      "proc": null,
+      "pid": 11,
+      "ts_unit": "s"
+    }
+  ],
+  "capability": {
+    "pid": 10,
+    "proc": "fixture",
+    "hooks": [
+      "CGPathGetBoundingBox"
+    ],
+    "missing": [
+      "aa_cache_render"
+    ]
+  },
+  "capabilities": [
+    {
+      "pid": 10,
+      "proc": "fixture",
+      "hooks": [
+        "CGPathGetBoundingBox"
+      ],
+      "missing": [
+        "aa_cache_render"
+      ]
+    }
+  ],
+  "errors": [],
+  "verdict": {
+    "verdict": "exploit-likely",
+    "score": 416,
+    "matches": [
+      {
+        "rule": "bouncer-static-hit",
+        "severity": "high",
+        "weight": 45,
+        "reason": "elegant-bouncer structural hit \u2014 known exploit shape in the file (static stage)",
+        "ts": 1700000000,
+        "detail": {
+          "threat": "BLASTPASS",
+          "cves": [
+            "CVE-2023-4863"
+          ]
+        },
+        "stack": []
+      },
+      {
+        "rule": "pdf-opened",
+        "severity": "low",
+        "weight": 1,
+        "reason": "PDF document opened in the instrumented process",
+        "ts": 1700000001,
+        "detail": {},
+        "stack": []
+      },
+      {
+        "rule": "pdf-embedded-font",
+        "severity": "low",
+        "weight": 15,
+        "reason": "font program parsed while PDF data was recently in flight (cross-format boundary)",
+        "ts": 1700000002,
+        "detail": {},
+        "stack": []
+      },
+      {
+        "rule": "glyph-path-anomaly",
+        "severity": "high",
+        "weight": 60,
+        "reason": "Non-finite, negative, or oversized exported glyph path (heuristic) [+15 context:quicklook_recent]",
+        "ts": 1700000003.0,
+        "detail": {
+          "bbox": {
+            "w": 2000
+          }
+        },
+        "stack": []
+      },
+      {
+        "rule": "image-bomb",
+        "severity": "low",
+        "weight": 10,
+        "reason": "decoded image >100 MP (decoder stress)",
+        "ts": 1700000004,
+        "detail": {},
+        "stack": []
+      },
+      {
+        "rule": "big-anon-map",
+        "severity": "low",
+        "weight": 45,
+        "reason": "anonymous map >=128MB (heap-spray prep) [escalated: bytes>=536870912]",
+        "ts": 1700000005,
+        "detail": {
+          "bytes": 2147483648
+        },
+        "stack": []
+      }
+    ],
+    "chains": [
+      {
+        "chain": "static-runtime-agreement",
+        "description": "static structural hit + runtime glyph anomaly (known + behavioral agreement)",
+        "rules_seen": [
+          "bouncer-static-hit",
+          "glyph-path-anomaly"
+        ],
+        "window_s": 300,
+        "ts": 1700000003.0,
+        "weight": 60,
+        "pid": 10
+      },
+      {
+        "chain": "glyph-grift-chain",
+        "description": "glyph-path anomaly inside recent document context (heuristic)",
+        "rules_seen": [
+          "glyph-path-anomaly"
+        ],
+        "window_s": 120,
+        "ts": 1700000003.0,
+        "weight": 60,
+        "pid": 10
+      },
+      {
+        "chain": "font-crossing",
+        "description": "PDF-embedded font crossed into the glyph rasterizer with an anomalous path",
+        "rules_seen": [
+          "glyph-path-anomaly",
+          "pdf-embedded-font"
+        ],
+        "window_s": 120,
+        "ts": 1700000003.0,
+        "weight": 60,
+        "pid": 10
+      },
+      {
+        "chain": "static-image-agreement",
+        "description": "static structural hit + decoder stress at runtime (BLASTPASS-class agreement)",
+        "rules_seen": [
+          "bouncer-static-hit",
+          "image-bomb"
+        ],
+        "window_s": 300,
+        "ts": 1700000004,
+        "weight": 60,
+        "pid": 11
+      }
+    ]
+  }
+}

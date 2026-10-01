@@ -1,0 +1,31 @@
+[package]
+name = "hotcell"
+version = "0.3.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Runtime exploit monitor for Apple document and image pipelines"
+license = "MIT"
+readme = "README.md"
+publish = false
+include = ["src/**", "assets/**", "tests/**", "docs/**", "vendor/**", "build.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
+
+[features]
+default = ["live"]
+live = ["dep:frida-sys"]
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.5", features = ["derive"] }
+ctrlc = "3.4"
+frida-sys = { path = "vendor/frida-sys", features = ["auto-download"], optional = true }
+indexmap = { version = "2", features = ["serde"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml_ng = "0.10"
+tempfile = "3"
+which = "7"
+
+[profile.release]
+lto = "thin"

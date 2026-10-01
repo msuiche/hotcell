@@ -1,45 +1,28 @@
-# glyph-grift.md — how CVE-2026-86950 maps onto hotcell
+# Glyph-path monitoring
 
-Source chain (public, calif.io "The Great Glyph Grift", Sept 2026; quoted by
-@odinshell, wished-for-tool tweet by @haifeili):
+The original project was motivated by reports of corruption in Apple's glyph
+rasterizer. Its initial implementation incorrectly read `CGPathGetBoundingBox`'s
+return value as a pointer and divided the result by 4096. Public CoreGraphics
+path coordinates are not the rasterizer's private fixed-point coordinates.
 
-```
-WhatsApp → QuickLook ext → PDFKit → PaperKit → PDFKit → CoreGraphics
-                                                      aa_cache_render
-```
+The current agent inspects the final path returned by `CTFontCreatePathForGlyph`
+with a native `CGRect` return signature. This lets Frida/libffi handle arm64's
+floating-point aggregate return convention. Hook traps are disabled during the
+read-only bounding-box query to avoid recursion. Intermediate font-parser paths
+are not size-scored: normal design-space outlines commonly exceed 1024 units
+before scaling, even for a 12-point font.
 
-Root cause: a unit-conversion bug (compiler-introduced fixed-point error) in
-the CoreGraphics glyph rasterizer. `aa_cache_render` sizes its coverage buffer
-from the glyph path bounding box as `width_px = (bbox_max_x − bbox_min_x) / 4096`;
-a corrupted bbox range ⇒ out-of-bounds write, reachable from a crafted PDF with
-a specially crafted font — on macOS *and* iOS, via thumbnail/rasterize paths
-(QuickLook, sips).
+A glyph-path anomaly is emitted for non-finite/negative dimensions or dimensions
+above 1024 user-space units. PDF/thumbnail context can corroborate this signal;
+a static finding from the same scan can form another chain. Large legitimate
+fonts can trigger this heuristic and require investigation, not an assumption
+that corruption occurred.
 
-## Detection surface (agent → rules)
+The live test compares an emitted oversized glyph's bounding box against the
+value read by a native CoreGraphics caller. It also verifies that an ordinary
+glyph and an unrelated large geometric path produce no glyph anomaly.
 
-| chain leg | where we watch | signal |
-| --- | --- | --- |
-| delivery: attachment thumbnail | `QLThumbnailGenerator generateBestRepresentation*` (ObjC) | `quicklook-render` (low tag) |
-| document data in flight | `PDFDocument -initWithData:` / `-initWithURL:`, PaperKit `*Data*` selectors | `pdf-opened`, `paperkit-data` (low) |
-| PDF → font boundary | `CGFontCreateWithDataProvider`, `CTFontCreateWithGraphicsFont` while PDF context recent | `pdf-embedded-font` (medium) |
-| glyph path construction | `CTFontCreatePathForGlyph` (per-thread marker) | context only |
-| **the fingerprint** | `CGPathGetBoundingBox` returned range ⇒ `w/4096` px | `glyph-path-anomaly` (high, context-escalated) |
-| sink reachability | `aa_cache_render` if exported on the build; else reported in capability event | `aa-cache-render-hit` |
-| chain assembly (host) | quicklook/pdf context tags + anomaly within 120 s | `glyph-grift-chain` (critical) |
-
-The bbox rule mirrors the bug's shape rather than any specific CVE: *any*
-font-parsing corruption that shows up as a nonsense glyph-path bounding box in
-a document-delivery context lands here — which is the EXPMON point: detect
-the exploit *behavior*, survive zero-day subclasses.
-
-## Honest notes
-
-- `aa_cache_render` is a local (non-exported) symbol in CoreGraphics on the
-  builds we could check; the agent watches the *exported* APIs around the
-  published backtrace (`CGGlyphBitmapCreateWithPathAndDilation` frame #1
-  equivalent) and says so in the capability report rather than pretending.
-- `CGPathGetBoundingBox` fires for all paths (not only glyph paths) — hence
-  the `in_glyph_path` correlation and context-escalation rather than one
-  blanket high-severity per path.
-- Rule thresholds (1024 px cap, 120 s windows, weights) are first-pass
-  calibration: qualify on real Mac/iOS traffic before trusting silence.
+This is exported-path coverage only. The internal `aa_cache_render` symbol is
+reported missing when it cannot be resolved. No particular CVE, internal
+fixed-point corruption, or complete QuickLook → PDFKit → PaperKit chain has
+been verified by these tests.
