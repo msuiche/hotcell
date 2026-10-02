@@ -1,0 +1,53 @@
+name: Rust checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.os }} / Rust ${{ matrix.rust }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, macos-15-intel]
+        rust: ["1.88.0", stable]
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev
+      - name: Install Rust
+        run: |
+          rustup toolchain install '${{ matrix.rust }}' --profile minimal --component clippy --component rustfmt
+          rustup override set '${{ matrix.rust }}'
+      - name: Formatting
+        if: matrix.rust == 'stable'
+        run: |
+          cargo fmt --all -- --check
+          cargo fmt --manifest-path vendor/frida-sys/Cargo.toml -- --check
+      - name: Tests without Frida
+        run: cargo test --locked --no-default-features
+      - name: Tests with Frida
+        run: cargo test --locked
+      - name: Clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --no-default-features -- -D warnings
+      - name: Native rendering and lifecycle regressions
+        if: runner.os == 'macOS'
+        run: cargo test --release --locked -- --ignored --test-threads=1

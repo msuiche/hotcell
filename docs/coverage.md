@@ -1,14 +1,19 @@
 # Coverage and qualification
 
-The v0.3 application and tests are Rust. Qualification is on macOS arm64 with
-Rust 1.99.0 and the pinned Frida 17.19.0 devkit. The declared Rust 1.88 minimum
-reflects dependency requirements; that compiler version has not been separately
-qualified.
+The v0.3 host application and test harnesses are Rust. Native qualification is on
+macOS 27.0.1 arm64 with the pinned Frida 17.19.0 devkit. The embedded agent remains
+JavaScript and the native test probe remains Objective-C.
 
-Verified on 2026-10-01: 38 non-live Rust tests, nine native tests passing
-in the optimized release profile, and 36 tests with `--no-default-features`.
+Verified on 2026-10-01:
+
+| Platform and compiler | Results |
+| --- | --- |
+| macOS arm64, Rust 1.99.0 | 42 non-live tests, 10 native tests in the optimized release profile, 40 tests with `--no-default-features` |
+| macOS arm64, minimum Rust 1.88.0 | All 52 default-feature tests, including native tests, in the optimized release profile |
+| Debian Bookworm arm64 container, minimum Rust 1.88.0 | 42 default-feature tests, 40 tests with `--no-default-features`; no native Apple rendering tests |
+
 Formatting and Clippy checks pass for the application; both feature configurations
-pass Clippy with warnings denied.
+pass Clippy with warnings denied on Rust 1.99.0 and 1.88.0.
 
 | Area | Evidence | Limits |
 | --- | --- | --- |
@@ -20,9 +25,9 @@ pass Clippy with warnings denied.
 | Glyph bounds | CoreText paths compared to native CGRect values | Exported final paths only, not internal rasterizer bounds |
 | False-positive checks | Ordinary glyph and unrelated large rectangle produce no glyph anomaly | Larger benign document/font corpus still needed |
 | Memory | Successful 2 GiB anonymous virtual mapping detected without signed 32-bit truncation | RWX transitions may be denied by host policy |
-| Static adapter | Real ELEGANTBOUNCER plus Rust runtime scan of a benign PDF completed with exit 0 and no errors; regression tests cover parsing, missing binary, timeout and exit failures | Rust malicious-fixture coverage has not been qualified |
+| Static adapter | Real ELEGANTBOUNCER plus Rust runtime scan of a benign PDF completed with exit 0 and no errors; startup and configured-path failures retain runtime results but mark the scan incomplete; parsing, timeout and exit regressions | Rust malicious-fixture coverage has not been qualified |
 | Correlation | Seconds/milliseconds, expiration, deduplication, process isolation; real glyph signal yields chain | Heuristic weights and thresholds need corpus calibration |
-| Replay | Python v0.2 golden report preserves verdict/context; Rust live positive and clean reports replay | Legacy reports without raw events are rejected |
+| Replay | Python v0.2 golden report preserves verdict/context; Rust live positive and clean reports replay; corrupt timestamps/units are rejected without writing output | Legacy reports without raw events or timestamps are rejected |
 | Failures | Malformed PDF, startup error, missing hooks, static errors, feature-disabled runtime | Incomplete reports must not be treated as a clean bill of health |
 
 ## Repeatable checks
@@ -31,10 +36,18 @@ pass Clippy with warnings denied.
 cargo test --locked
 cargo test --locked --no-default-features
 cargo fmt --all -- --check
+cargo fmt --manifest-path vendor/frida-sys/Cargo.toml -- --check
 cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked -- --ignored --test-threads=1
+cargo clippy --locked --all-targets --no-default-features -- -D warnings
+cargo test --release --locked -- --ignored --test-threads=1
 cargo build --release --locked
 ```
+
+[The CI workflow](../.github/workflows/ci.yml) runs both feature configurations on
+Linux and macOS arm64/Intel with Rust 1.88.0 and stable, and adds native release
+tests on macOS. Its syntax passes actionlint; hosted jobs have not been run from
+this checkout. Runner labels follow [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Configured jobs are not evidence of a passing run, particularly for Intel macOS.
 
 The ignored tests require macOS, Frida's native devkit, Clang and permission to
 instrument their own test processes. The Objective-C probe is a test fixture;
@@ -63,7 +76,8 @@ malformed-document regression on the qualification host. The local bindings pin
 - Representative benign and malicious document corpora, precision/recall and overhead.
 - Internal glyph rasterizer sink resolution; exported proxies cannot establish full coverage.
 - Automatic child/XPC process instrumentation is not implemented.
-- Live monitoring on non-macOS hosts is not qualified; use the Frida-free build for static/replay work.
+- Linux builds and offline tests pass with both feature configurations. Device
+  attachment on Linux is not qualified; Apple runtime file scans require macOS.
 
 ## Scope of the Rust migration
 
@@ -72,7 +86,8 @@ The v0.2 JSON fixture is compatibility data, not executable Python. The embedded
 Frida agent remains JavaScript, and the native test probe is Objective-C.
 
 Verified improvements are deployment without Python or per-scan compilation,
-embedded assets, acknowledged completion, and tested lifecycle cleanup. These
-checks establish behavior on the qualified macOS arm64 host. They do not establish
+embedded assets, acknowledged completion, tested lifecycle cleanup, explicit
+scanner-failure reporting, and strict replay timestamp validation. These checks
+establish behavior on the qualified hosts. They do not establish
 better detection accuracy or faster execution; no representative detection corpus
 or comparative performance benchmark has been run.

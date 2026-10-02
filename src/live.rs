@@ -338,7 +338,7 @@ impl Monitor {
         // The RPC reply is a barrier after all boot messages and verifies that
         // hooks exist before the suspended target is allowed to execute.
         let cap = session.capability()?;
-        if !cap["hooks"].as_array().is_some_and(|a| !a.is_empty()) {
+        if cap["hooks"].as_array().is_none_or(|a| a.is_empty()) {
             bail!("agent initialized without any usable hooks");
         }
         Ok(session)

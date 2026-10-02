@@ -36,6 +36,11 @@ For static scanning and report replay without the Frida dependency:
 cargo build --release --locked --no-default-features
 ```
 
+Linux builds with the default feature also require libclang development files
+(`apt-get install libclang-dev` on Debian/Ubuntu). Both feature configurations
+are tested on Linux arm64 with Rust 1.88. Runtime file rendering requires macOS;
+see [qualification results and remaining gaps](docs/coverage.md).
+
 ## Usage
 
 ```bash

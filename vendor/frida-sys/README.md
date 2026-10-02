@@ -13,6 +13,8 @@ Local changes:
   devkit's matching header.
 - Limit generated declarations to Frida and GLib, excluding unrelated libc
   declarations from the devkit's umbrella header.
+- Re-export the namespaced GLib cancellation, event-loop, and cleanup functions
+  used by hotcell on Linux.
 
 No Frida native binaries are stored here. The upstream `frida-build` build helper
 downloads the pinned platform devkit during the first build. Replace this local
