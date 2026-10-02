@@ -66,6 +66,18 @@ fn missing_binary_is_explicit() {
 }
 #[cfg(unix)]
 #[test]
+fn existing_scanner_that_cannot_start_is_incomplete() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = tempfile::tempdir().unwrap();
+    let script = tmp.path().join("scanner");
+    std::fs::write(&script, "#!/missing-hotcell-interpreter\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let result = scan_with_binary(&script, Path::new("x.pdf"), Duration::from_secs(1));
+    assert!(result.available);
+    assert!(result.error.unwrap().contains("failed to run"));
+}
+#[cfg(unix)]
+#[test]
 fn scanner_timeout_kills_and_reaps_child() {
     use std::os::unix::fs::PermissionsExt;
     let tmp = tempfile::tempdir().unwrap();

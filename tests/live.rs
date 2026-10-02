@@ -204,6 +204,49 @@ fn pdf_image_and_replay() {
 }
 #[test]
 #[ignore = "requires local macOS Frida instrumentation"]
+fn static_scanner_failures_preserve_runtime_results_and_mark_scan_incomplete() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    let broken = f.root.path().join("broken-scanner");
+    std::fs::write(&broken, "#!/missing-hotcell-interpreter\n").unwrap();
+    std::fs::set_permissions(&broken, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let missing = f.root.path().join("missing-scanner");
+    for (name, scanner, available, exit) in [
+        ("broken", Some(&broken), true, 2),
+        ("missing-override", Some(&missing), false, 2),
+        ("optional", None, false, 0),
+    ] {
+        let out = f.root.path().join(name);
+        let mut cmd = cli();
+        cmd.env("PATH", "/nonexistent-hotcell-audit-path")
+            .env_remove("HOTCELL_BOUNCER");
+        if let Some(scanner) = scanner {
+            cmd.env("HOTCELL_BOUNCER", scanner);
+        }
+        let output = cmd
+            .args(["scan", "--minutes", ".2", "--file"])
+            .arg(&f.pdf)
+            .arg("--out")
+            .arg(&out)
+            .output()
+            .unwrap();
+        assert_code(&output, exit);
+        let (saved, _) = read_report(&out);
+        assert_eq!(saved["meta"]["static"]["available"], available);
+        assert_eq!(
+            saved["meta"]["status"],
+            if exit == 0 { "complete" } else { "incomplete" }
+        );
+        assert_eq!(saved["errors"].as_array().unwrap().is_empty(), exit == 0);
+        assert!(saved["signals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["rule"] == "pdf-rendered"));
+    }
+}
+#[test]
+#[ignore = "requires local macOS Frida instrumentation"]
 fn every_pdf_page_and_gif_frame_is_rendered() {
     let f = Fixture::new();
     let pdf = f.root.path().join("three-pages.pdf");

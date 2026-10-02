@@ -93,7 +93,11 @@ scanner is disclosed and runtime scanning continues; `--static-only` requires it
 You cannot combine `--static-only` and `--no-static`.
 
 Static results parse ELEGANTBOUNCER's single-file summary table and legacy threat
-lines. Nonzero exits, timeouts, and unrecognized output are incomplete.
+lines. Startup failures, nonzero exits, timeouts, and unrecognized output are
+incomplete. Setting `HOTCELL_BOUNCER` makes the static stage required: a missing
+or unusable configured scanner marks the scan incomplete even if rendering
+succeeds. Without that override, an absent scanner is reported as unavailable
+and runtime scanning can still complete. `--no-static` explicitly skips it.
 Static findings remain available when runtime scanning fails.
 
 ## Detection and limits

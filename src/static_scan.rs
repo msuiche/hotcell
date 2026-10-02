@@ -111,18 +111,25 @@ pub fn tail(s: &str, count: usize) -> String {
         .collect()
 }
 pub fn scan(path: &Path, timeout: Duration) -> StaticResult {
-    let candidate = std::env::var_os("HOTCELL_BOUNCER")
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "elegantbouncer".into());
+    let configured = std::env::var_os("HOTCELL_BOUNCER").filter(|s| !s.is_empty());
+    let candidate = configured
+        .as_deref()
+        .unwrap_or_else(|| "elegantbouncer".as_ref());
     let binary = match which::which(candidate) {
         Ok(p) => p,
-        Err(_) => return StaticResult {
-            error: Some(
-                "elegantbouncer not found on PATH (set HOTCELL_BOUNCER to enable the static stage)"
-                    .into(),
-            ),
-            ..Default::default()
-        },
+        Err(_) => {
+            return StaticResult {
+                error: Some(if configured.is_some() {
+                    format!(
+                        "HOTCELL_BOUNCER is not an executable: {}",
+                        candidate.to_string_lossy()
+                    )
+                } else {
+                    "elegantbouncer not found on PATH (set HOTCELL_BOUNCER to enable the static stage)".into()
+                }),
+                ..Default::default()
+            }
+        }
     };
     scan_with_binary(&binary, path, timeout)
 }
@@ -179,6 +186,7 @@ pub fn scan_with_binary(binary: &Path, path: &Path, timeout: Duration) -> Static
         Ok(result)
     };
     run().unwrap_or_else(|e| StaticResult {
+        available: binary.is_file(),
         error: Some(format!("elegantbouncer failed to run: {e:#}")),
         ..Default::default()
     })

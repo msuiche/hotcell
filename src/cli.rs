@@ -218,7 +218,9 @@ fn scan(file: &Path, static_only: bool, no_static: bool, common: &Common) -> Res
                 "unavailable"
             }
         );
-        if result.available || static_only {
+        let explicitly_configured =
+            std::env::var_os("HOTCELL_BOUNCER").is_some_and(|s| !s.is_empty());
+        if result.available || static_only || explicitly_configured {
             error(&mut engine, message);
         }
     } else if !result.skipped {
