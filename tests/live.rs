@@ -17,29 +17,7 @@ impl Fixture {
     fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let pdf = root.path().join("clean.pdf");
-        let objects: &[&[u8]] = &[
-            b"<< /Type /Catalog /Pages 2 0 R >>",
-            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>",
-            b"<< /Length 28 >>\nstream\n1 0 0 rg 20 20 160 160 re f\nendstream",
-        ];
-        let mut data = b"%PDF-1.4\n".to_vec();
-        let mut offsets = vec![];
-        for (i, object) in objects.iter().enumerate() {
-            offsets.push(data.len());
-            data.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
-            data.extend_from_slice(object);
-            data.extend_from_slice(b"\nendobj\n");
-        }
-        let xref = data.len();
-        data.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
-        for offset in offsets {
-            data.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
-        }
-        data.extend_from_slice(
-            format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes(),
-        );
-        std::fs::write(&pdf, data).unwrap();
+        write_pdf(&pdf, 1);
         Self { root, pdf }
     }
     fn scan(&self, input: &Path, name: &str) -> (Output, Value, PathBuf) {
@@ -116,6 +94,52 @@ impl Fixture {
         )
     }
 }
+fn write_pdf(path: &Path, pages: usize) {
+    let kids = (0..pages)
+        .map(|i| format!("{} 0 R", i + 3))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut objects = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        format!("<< /Type /Pages /Kids [{kids}] /Count {pages} >>").into_bytes(),
+    ];
+    for _ in 0..pages {
+        objects.push(
+            format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents {} 0 R >>",
+                pages + 3
+            )
+            .into_bytes(),
+        );
+    }
+    let stream = b"1 0 0 rg 20 20 160 160 re f\n";
+    objects.push(
+        format!(
+            "<< /Length {} >>\nstream\n{}endstream",
+            stream.len(),
+            String::from_utf8_lossy(stream)
+        )
+        .into_bytes(),
+    );
+    let mut data = b"%PDF-1.4\n".to_vec();
+    let mut offsets = vec![];
+    for (i, object) in objects.iter().enumerate() {
+        offsets.push(data.len());
+        data.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        data.extend_from_slice(object);
+        data.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = data.len();
+    let size = objects.len() + 1;
+    data.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+    for offset in offsets {
+        data.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    data.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes(),
+    );
+    std::fs::write(path, data).unwrap();
+}
 fn cli() -> Command {
     Command::new(env!("CARGO_BIN_EXE_hotcell"))
 }
@@ -177,6 +201,91 @@ fn pdf_image_and_replay() {
     let (replay, _) = read_report(&replay_dir);
     assert_eq!(replay["verdict"], pdf["verdict"]);
     assert_eq!(replay["signals"], pdf["signals"]);
+}
+#[test]
+#[ignore = "requires local macOS Frida instrumentation"]
+fn every_pdf_page_and_gif_frame_is_rendered() {
+    let f = Fixture::new();
+    let pdf = f.root.path().join("three-pages.pdf");
+    write_pdf(&pdf, 3);
+    // A two-frame, one-pixel GIF, with a global black/white palette and one
+    // LZW-encoded pixel in each frame. Both frames are ordinary valid images.
+    let gif = f.root.path().join("two-frames.gif");
+    let mut data = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff".to_vec();
+    for pixel in [0x44, 0x4c] {
+        data.extend_from_slice(b"\x21\xf9\x04\x00\x01\x00\x00\x00");
+        data.extend_from_slice(b"\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00");
+        data.extend_from_slice(&[2, 2, pixel, 1, 0]);
+    }
+    data.push(0x3b);
+    std::fs::write(&gif, data).unwrap();
+    for (input, name, rule, count, hook) in [
+        (pdf, "pages", "pdf-rendered", 3, "CGContextDrawPDFPage"),
+        (
+            gif,
+            "frames",
+            "image-decoded",
+            2,
+            "CGImageSourceCreateImageAtIndex",
+        ),
+    ] {
+        let (output, saved, _) = f.scan(&input, name);
+        assert_code(&output, 0);
+        assert_eq!(saved["meta"]["status"], "complete");
+        let signals = saved["signals"].as_array().unwrap();
+        assert_eq!(signals.iter().filter(|s| s["rule"] == rule).count(), count);
+        assert!(signals.iter().any(|s| s["rule"] == "render-complete"
+            && s["detail"]["status"] == 0
+            && s["detail"]["count"] == count));
+        assert_eq!(saved["capability"]["hits"][hook], count);
+        assert!(std::fs::read(saved["meta"]["preview"].as_str().unwrap())
+            .unwrap()
+            .starts_with(b"\x89PNG"));
+    }
+}
+
+#[test]
+#[ignore = "requires local macOS Frida instrumentation"]
+fn standalone_binary_scans_and_replays_without_python_or_compiler() {
+    let f = Fixture::new();
+    let installed = f.root.path().join("hotcell");
+    std::fs::copy(env!("CARGO_BIN_EXE_hotcell"), &installed).unwrap();
+    let command = || {
+        let mut cmd = Command::new(&installed);
+        cmd.current_dir(f.root.path())
+            .env("PATH", "/nonexistent-hotcell-audit-path");
+        cmd
+    };
+    let output = command()
+        .args([
+            "scan",
+            "--no-static",
+            "--file",
+            "clean.pdf",
+            "--minutes",
+            ".2",
+            "--out",
+            "scan",
+        ])
+        .output()
+        .unwrap();
+    assert_code(&output, 0);
+    let (saved, source) = read_report(&f.root.path().join("scan"));
+    assert_eq!(saved["meta"]["status"], "complete");
+    assert_eq!(saved["errors"], json!([]));
+    assert_eq!(saved["verdict"]["verdict"], "log");
+    assert_code(
+        &command()
+            .args(["report", "--session"])
+            .arg(source)
+            .args(["--out", "replay"])
+            .output()
+            .unwrap(),
+        0,
+    );
+    let (replayed, _) = read_report(&f.root.path().join("replay"));
+    assert_eq!(replayed["verdict"], saved["verdict"]);
+    assert_eq!(replayed["signals"], saved["signals"]);
 }
 #[test]
 #[ignore = "requires local macOS Frida instrumentation"]

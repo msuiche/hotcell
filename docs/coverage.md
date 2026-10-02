@@ -5,22 +5,22 @@ Rust 1.99.0 and the pinned Frida 17.19.0 devkit. The declared Rust 1.88 minimum
 reflects dependency requirements; that compiler version has not been separately
 qualified.
 
-Verified on 2026-10-01: 38 non-live Rust tests, seven native tests (also passing
-in the optimized release profile), and 36 tests with `--no-default-features`.
+Verified on 2026-10-01: 38 non-live Rust tests, nine native tests passing
+in the optimized release profile, and 36 tests with `--no-default-features`.
 Formatting and Clippy checks pass for the application; both feature configurations
 pass Clippy with warnings denied.
 
 | Area | Evidence | Limits |
 | --- | --- | --- |
-| Build | Cargo application with embedded agent/rules; default and Frida-free feature configurations | Native dependencies require platform build tools and an initial devkit download |
-| Lifecycle | Real agent boot, capability barrier before resume, CLI watch attachment, process exit, owned-process cleanup | Protected app attachment depends on OS policy |
-| PDF scan | Direct CoreGraphics open/page render, PNG preview, acknowledged completion | Does not reproduce QuickLook/XPC or PaperKit routing |
-| Image scan | Direct ImageIO PNG decode, preview and completion | Other formats/OS versions need qualification |
+| Build | Copied executable scans and replays outside the checkout with no Python/compiler on PATH; embedded agent/rules; both feature configurations | Native dependencies require platform build tools and an initial devkit download |
+| Lifecycle | Real agent boot, capability barrier before resume, CLI watch attachment and live console signals, process exit, owned-process cleanup | Protected app attachment depends on OS policy |
+| PDF scan | Three-page PDF produces three observed renders and completion count 3; PNG preview | Does not reproduce QuickLook/XPC or PaperKit routing |
+| Image scan | PNG and two-frame GIF decode; GIF produces two observed decodes and completion count 2 | Other formats/OS versions need qualification |
 | Objective-C | Real PDFDocument `initWithURL:` hook through native libobjc | PaperKit/QuickLook selectors remain best-effort |
 | Glyph bounds | CoreText paths compared to native CGRect values | Exported final paths only, not internal rasterizer bounds |
 | False-positive checks | Ordinary glyph and unrelated large rectangle produce no glyph anomaly | Larger benign document/font corpus still needed |
 | Memory | Successful 2 GiB anonymous virtual mapping detected without signed 32-bit truncation | RWX transitions may be denied by host policy |
-| Static adapter | Summary/legacy parsing, deduplication, subprocess execution, missing binary, timeout and exit failures | Rust suite uses stub scanners; real ELEGANTBOUNCER qualification was performed on the Python baseline |
+| Static adapter | Real ELEGANTBOUNCER plus Rust runtime scan of a benign PDF completed with exit 0 and no errors; regression tests cover parsing, missing binary, timeout and exit failures | Rust malicious-fixture coverage has not been qualified |
 | Correlation | Seconds/milliseconds, expiration, deduplication, process isolation; real glyph signal yields chain | Heuristic weights and thresholds need corpus calibration |
 | Replay | Python v0.2 golden report preserves verdict/context; Rust live positive and clean reports replay | Legacy reports without raw events are rejected |
 | Failures | Malformed PDF, startup error, missing hooks, static errors, feature-disabled runtime | Incomplete reports must not be treated as a clean bill of health |
@@ -64,3 +64,15 @@ malformed-document regression on the qualification host. The local bindings pin
 - Internal glyph rasterizer sink resolution; exported proxies cannot establish full coverage.
 - Automatic child/XPC process instrumentation is not implemented.
 - Live monitoring on non-macOS hosts is not qualified; use the Frida-free build for static/replay work.
+
+## Scope of the Rust migration
+
+No Python source, packaging, or runtime invocation remains in the repository.
+The v0.2 JSON fixture is compatibility data, not executable Python. The embedded
+Frida agent remains JavaScript, and the native test probe is Objective-C.
+
+Verified improvements are deployment without Python or per-scan compilation,
+embedded assets, acknowledged completion, and tested lifecycle cleanup. These
+checks establish behavior on the qualified macOS arm64 host. They do not establish
+better detection accuracy or faster execution; no representative detection corpus
+or comparative performance benchmark has been run.
