@@ -263,8 +263,26 @@ fn list(_: &Common) -> Result<i32> {
 #[cfg(feature = "live")]
 fn drain(monitor: &crate::live::Monitor, engine: &mut RuleEngine) {
     for payload in monitor.drain() {
+        let matches_before = engine.matches.len();
+        let errors_before = engine.errors.len();
         if let Err(e) = engine.ingest(payload) {
             error(engine, e);
+            continue;
+        }
+        for matched in &engine.matches[matches_before..] {
+            println!(
+                "  [signal] {} (+{}) — {}",
+                matched.rule, matched.weight, matched.reason
+            );
+        }
+        for failure in &engine.errors[errors_before..] {
+            eprintln!(
+                "  [agent-error] {}",
+                failure
+                    .pointer("/detail/description")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown agent error")
+            );
         }
     }
 }

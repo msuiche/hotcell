@@ -269,6 +269,11 @@ fn watch_cli_attaches_to_its_probe() {
     let _ = process.kill();
     let _ = process.wait();
     assert_code(&output, 0);
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("[signal] glyph-path-anomaly"),
+        "watch must display observed signals while monitoring: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
     let (saved, _) = read_report(&out);
     assert_eq!(saved["verdict"]["verdict"], "exploit-likely");
     assert!(!saved["capabilities"].as_array().unwrap().is_empty());
