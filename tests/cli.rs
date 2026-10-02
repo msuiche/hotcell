@@ -162,6 +162,34 @@ fn replay_preserves_python_report_and_supports_rule_override() {
     assert_eq!(report(&out)["verdict"]["verdict"], "log");
 }
 #[test]
+fn replay_rejects_corrupt_timestamps_without_writing_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let golden =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/python-v0.2.session.json");
+    let original: Value = serde_json::from_slice(&std::fs::read(golden).unwrap()).unwrap();
+    for (name, field, value) in [
+        ("timestamp", "ts", json!("not a timestamp")),
+        ("unit", "ts_unit", json!("minutes")),
+        ("missing", "ts", Value::Null),
+    ] {
+        let mut saved = original.clone();
+        saved["signals"][0][field] = value;
+        let source = temp.path().join(format!("{name}.json"));
+        std::fs::write(&source, serde_json::to_vec(&saved).unwrap()).unwrap();
+        let out = temp.path().join(name);
+        let output = cli()
+            .args(["report", "--session"])
+            .arg(source)
+            .arg("--out")
+            .arg(&out)
+            .output()
+            .unwrap();
+        assert_code(&output, 2);
+        assert!(String::from_utf8_lossy(&output.stderr).contains("timestamp"));
+        assert!(!out.exists());
+    }
+}
+#[test]
 fn legacy_report_is_rejected_without_writing_output() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("legacy.json");

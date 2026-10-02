@@ -77,7 +77,9 @@ Each run writes a JSON session and Markdown report. JSON contains raw signals,
 process identity, timestamps in seconds, context, capabilities, errors, and
 verdicts. Reports with raw signals from Python v0.2 remain replayable. Legacy
 reports without raw signals are rejected because their verdict cannot be
-faithfully recalculated.
+faithfully recalculated. Replay also rejects missing or malformed timestamps and
+unsupported timestamp units; it never substitutes the current time for saved
+observations.
 
 | Verdict | Meaning |
 | --- | --- |

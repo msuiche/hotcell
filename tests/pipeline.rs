@@ -244,3 +244,21 @@ fn invalid_rules_and_payloads_fail_explicitly() {
     assert!(Signal::from_payload(json!([])).is_err());
     assert!(Signal::from_payload(json!({"rule":1})).is_err());
 }
+#[test]
+fn malformed_timestamps_and_units_are_rejected() {
+    for ts in [json!("1700000000"), json!(false), json!([]), json!({})] {
+        assert!(Signal::from_payload(json!({"rule":"image-bomb", "ts":ts})).is_err());
+    }
+    for unit in [json!("minutes"), json!(1), json!(false), json!([])] {
+        assert!(Signal::from_payload(json!({"ts":1700000000, "ts_unit":unit})).is_err());
+    }
+}
+#[test]
+fn absent_live_timestamps_use_current_seconds_even_with_millisecond_unit() {
+    let before = hotcell::events::epoch_seconds();
+    for unit in [Value::Null, json!("s"), json!("ms")] {
+        let signal = Signal::from_payload(json!({"ts_unit":unit})).unwrap();
+        assert!(signal.ts >= before && signal.ts <= hotcell::events::epoch_seconds());
+        assert_eq!(signal.ts_unit, "s");
+    }
+}

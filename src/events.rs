@@ -49,13 +49,24 @@ impl Signal {
         if !v.is_object() {
             bail!("signal must be a JSON object");
         }
-        let mut ts = v
-            .get("ts")
-            .and_then(Value::as_f64)
-            .unwrap_or_else(epoch_seconds);
-        if v["ts_unit"] == "ms" || (v["ts_unit"].is_null() && ts > 1e11) {
-            ts /= 1000.0;
-        }
+        let unit = match v.get("ts_unit") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(unit)) if matches!(unit.as_str(), "s" | "ms") => Some(unit.as_str()),
+            _ => bail!("signal timestamp unit must be 's' or 'ms'"),
+        };
+        let ts = match v.get("ts") {
+            None | Some(Value::Null) => epoch_seconds(),
+            Some(value) => {
+                let ts = value
+                    .as_f64()
+                    .context("signal timestamp must be a number")?;
+                if unit == Some("ms") || (unit.is_none() && ts > 1e11) {
+                    ts / 1000.0
+                } else {
+                    ts
+                }
+            }
+        };
         if !ts.is_finite() {
             bail!("signal timestamp must be finite");
         }
@@ -391,6 +402,9 @@ impl RuleEngine {
     }
     pub fn replay(&mut self, saved: &SessionReport) -> Result<()> {
         for s in &saved.signals {
+            if s["ts"].is_null() {
+                bail!("saved signal is missing its timestamp");
+            }
             self.process(Signal::from_payload(s.clone())?);
         }
         if saved.capabilities.is_empty() {
